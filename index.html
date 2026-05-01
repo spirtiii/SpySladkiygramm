@@ -291,6 +291,29 @@
             text-align: center;
             padding: 8px;
         }
+
+        .admin-layout {
+            display: grid;
+            grid-template-columns: minmax(260px, 34%) 1fr;
+            gap: 10px;
+            margin: 10px;
+            flex: 1;
+            min-height: 0;
+        }
+        .admin-left, .admin-right { border-radius: var(--radius); min-height: 0; }
+        .admin-left { padding: 14px; display: flex; flex-direction: column; }
+        .admin-right { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+        .admin-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+        .admin-sub { color: var(--text-sec); font-size: 12px; margin-bottom: 12px; }
+        .tester-controls { display: grid; gap: 8px; margin-bottom: 12px; }
+        .tester-btn { border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #eaf5ff; border-radius: 10px; padding: 9px; cursor: pointer; }
+        .tester-btn:active { transform: scale(.99); }
+        .live-box { border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 10px; background: rgba(11,20,36,.45); flex: 1; overflow: auto; }
+        .code-editor { width: 100%; flex: 1; background: #060d1a; color: #d8edff; border: none; outline: none; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.4; }
+        .preview-frame { width: 100%; height: 100%; border: 0; background: #fff; }
+        .admin-split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; flex: 1; min-height: 0; }
+        .pane { border: 1px solid rgba(255,255,255,.15); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+        .pane-head { padding: 8px 10px; font-size: 12px; color: #9ec0dc; border-bottom: 1px solid rgba(255,255,255,.12); }
     </style>
 </head>
 <body>
@@ -320,6 +343,7 @@
             <i class="fas fa-users" style="color:var(--primary)"></i>
             <div class="header-title">Пользователи</div>
             <i class="fas fa-layer-group groups-btn" title="Группы" onclick="openGroups()"></i>
+            <i class="fas fa-flask groups-btn" title="Админ панель" onclick="openAdminPanel()"></i>
             <div id="status" style="font-size:11px; color:#b7cde2; margin-left:10px;">Загрузка...</div>
         </div>
         <div id="list-users" class="list-wrap glass"></div>
@@ -336,7 +360,7 @@
 
     <div id="screen-chat" class="screen chat-bg">
         <div class="header glass">
-            <i class="fas fa-arrow-left back-btn" onclick="goBack('screen-targets')"></i>
+            <i class="fas fa-arrow-left back-btn" onclick="goBack(lastChatBackScreen)"></i>
             <div class="header-title" id="chat-header-names">Чат</div>
         </div>
         <div id="messages" class="msgs-area glass"></div>
@@ -349,6 +373,46 @@
             <div id="groups-status" style="font-size:11px; color:#b7cde2;">Загрузка...</div>
         </div>
         <div id="list-groups" class="list-wrap glass"></div>
+    </div>
+
+    <div id="screen-admin" class="screen">
+        <div class="header glass">
+            <i class="fas fa-arrow-left back-btn" onclick="goBack('screen-users')"></i>
+            <div class="header-title">Админ панель</div>
+        </div>
+        <div class="admin-layout">
+            <div class="admin-left glass">
+                <div class="admin-title">Сладкий тест</div>
+                <div class="admin-sub">Sweet Test • локальная песочница тестеров (не изменяет основной сайт)</div>
+                <div class="tester-controls">
+                    <button class="tester-btn" onclick="loadTemplate('default')">Загрузить шаблон</button>
+                    <button class="tester-btn" onclick="loadTemplate('menu')">Шаблон меню тестера</button>
+                    <button class="tester-btn" onclick="syncPreview()">Обновить предпросмотр</button>
+                    <button class="tester-btn" onclick="saveDraft()">Сохранить черновик</button>
+                </div>
+                <div id="sandbox-info" class="live-box">
+                    <b>Инструменты тестера:</b>
+                    <ul style="margin:8px 0 0 18px;line-height:1.55;">
+                        <li>Быстрое редактирование HTML/CSS/JS.</li>
+                        <li>Изолированный iframe-предпросмотр.</li>
+                        <li>Локальное сохранение черновика в браузере.</li>
+                        <li>Безопасный сброс к шаблону.</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="admin-right glass">
+                <div class="admin-split">
+                    <div class="pane">
+                        <div class="pane-head">Код (локальная копия)</div>
+                        <textarea id="sandbox-editor" class="code-editor"></textarea>
+                    </div>
+                    <div class="pane">
+                        <div class="pane-head">Preview (isolated)</div>
+                        <iframe id="sandbox-preview" class="preview-frame" sandbox="allow-scripts"></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -378,8 +442,15 @@
 
         let currentVictimId = null;
         let currentVictimName = "";
+        let currentGroup = null;
+        let lastChatBackScreen = 'screen-targets';
         let selectedActionUser = null;
         let chatListener = null;
+        let sandboxTimer = null;
+        const sandboxTemplates = {
+            default: `<!doctype html><html><head><style>body{font-family:Arial;padding:20px}button{padding:8px 12px;border-radius:8px;border:1px solid #333;background:#f3f3f3;cursor:pointer}.box{margin-top:12px;padding:12px;border:1px dashed #aaa}</style></head><body><h3>Sweet Test</h3><p>Edit this code and click button.</p><button onclick="document.querySelector('.box').textContent='Updated '+new Date().toLocaleTimeString()">Run test</button><div class="box">Ready.</div></body></html>`,
+            menu: `<!doctype html><html><head><style>body{margin:0;font-family:Inter,Arial;display:grid;grid-template-columns:210px 1fr;height:100vh}.nav{background:#0f172a;color:#dbeafe;padding:12px}.nav button{display:block;width:100%;margin-bottom:8px;padding:8px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#fff}.main{padding:14px}.card{border:1px solid #cbd5e1;border-radius:10px;padding:14px}</style></head><body><div class="nav"><h4>Tester menu</h4><button onclick="set('Smoke tests')">Smoke tests</button><button onclick="set('Regression')">Regression</button><button onclick="set('UI checks')">UI checks</button></div><div class="main"><div class="card" id="out">Select scenario.</div></div><script>function set(t){document.getElementById('out').textContent='Mode: '+t}</script></body></html>`
+        };
 
         window.onload = () => {
             bindAccessHandlers();
@@ -569,6 +640,7 @@
             area.innerHTML = '<div style="text-align:center;padding:20px;color:#95b1c9">Загрузка...</div>';
 
             showScreen('screen-chat');
+            lastChatBackScreen = 'screen-targets';
             if (chatListener) chatListener.off();
 
             chatListener = db.ref(`messages/${chatKey}`).limitToLast(150);
@@ -580,6 +652,34 @@
                 }
                 drawMsg(s.val(), otherName);
             });
+        }
+
+        function openGroupChat(groupId, groupTitle) {
+            const area = document.getElementById('messages');
+            currentGroup = { groupId, groupTitle };
+            document.getElementById('chat-header-names').innerText = `Группа: ${groupTitle}`;
+            area.innerHTML = '<div style="text-align:center;padding:20px;color:#95b1c9">Загрузка...</div>';
+            showScreen('screen-chat');
+            lastChatBackScreen = 'screen-groups';
+            if (chatListener) chatListener.off();
+
+            const paths = [`groupMessages/${groupId}`, `groups/${groupId}/messages`, `messages/group_${groupId}`];
+            let loaded = false;
+            const tryPath = (idx = 0) => {
+                if (idx >= paths.length) {
+                    if (!loaded) area.innerHTML = '<div style="text-align:center;padding:20px;color:#95b1c9">Сообщений в группе не найдено</div>';
+                    return;
+                }
+                const ref = db.ref(paths[idx]).limitToLast(150);
+                ref.once('value').then(snap => {
+                    if (!snap.exists()) return tryPath(idx + 1);
+                    loaded = true;
+                    chatListener = ref;
+                    area.innerHTML = '';
+                    ref.on('child_added', s => drawMsg(s.val(), groupTitle));
+                }).catch(() => tryPath(idx + 1));
+            };
+            tryPath();
         }
 
         function safeDate(msg) {
@@ -666,8 +766,39 @@
                     </div>
                     <i class="fas fa-hashtag" style="color:#7f9db8"></i>
                 `;
+                div.onclick = () => openGroupChat(gid, title);
                 list.appendChild(div);
             });
+        }
+
+        function openAdminPanel() {
+            showScreen('screen-admin');
+            const editor = document.getElementById('sandbox-editor');
+            if (!editor.value.trim()) editor.value = localStorage.getItem('sg_sandbox_draft') || sandboxTemplates.default;
+            syncPreview();
+            if (!editor.dataset.bound) {
+                editor.addEventListener('input', () => {
+                    clearTimeout(sandboxTimer);
+                    sandboxTimer = setTimeout(syncPreview, 350);
+                });
+                editor.dataset.bound = '1';
+            }
+        }
+
+        function loadTemplate(type) {
+            document.getElementById('sandbox-editor').value = sandboxTemplates[type] || sandboxTemplates.default;
+            syncPreview();
+        }
+
+        function syncPreview() {
+            const code = document.getElementById('sandbox-editor').value;
+            document.getElementById('sandbox-preview').srcdoc = code;
+        }
+
+        function saveDraft() {
+            const code = document.getElementById('sandbox-editor').value;
+            localStorage.setItem('sg_sandbox_draft', code);
+            alert('Черновик сохранен локально в браузере');
         }
 
         function openActionSheet(uid, name) {
