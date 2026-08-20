@@ -36,13 +36,18 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        html {
+            height: 100%;
+        }
+
         body {
             background:
                 radial-gradient(circle at 15% 12%, rgba(88, 128, 255, 0.35), transparent 30%),
                 radial-gradient(circle at 88% 80%, rgba(0, 229, 255, 0.24), transparent 35%),
                 linear-gradient(180deg, #050913, #0a1424 55%, #080d17);
             color: var(--text);
-            height: 100vh;
+            min-height: 100%;
+            height: 100dvh;
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -88,7 +93,9 @@
             margin: 10px;
             border-radius: var(--radius);
             flex: 1;
+            min-height: 0;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .item {
@@ -314,6 +321,47 @@
         .admin-split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; flex: 1; min-height: 0; }
         .pane { border: 1px solid rgba(255,255,255,.15); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
         .pane-head { padding: 8px 10px; font-size: 12px; color: #9ec0dc; border-bottom: 1px solid rgba(255,255,255,.12); }
+
+        @media (max-width: 900px) {
+            .admin-layout {
+                grid-template-columns: 1fr;
+                overflow-y: auto;
+            }
+
+            .admin-left { min-height: 260px; }
+            .admin-right { min-height: 520px; }
+        }
+
+        @media (max-width: 640px) {
+            body { height: 100svh; }
+
+            .header {
+                height: auto;
+                min-height: 54px;
+                margin: 8px 8px 0;
+                padding: 8px 10px;
+                gap: 8px;
+            }
+
+            .header-title {
+                font-size: 15px;
+                margin-left: 4px;
+            }
+
+            .list-wrap, .msgs-area, .admin-layout { margin: 8px; }
+            .item { padding: 12px 10px; }
+            .avatar { width: 42px; height: 42px; margin-right: 10px; border-radius: 14px; }
+            .msg { max-width: 92%; font-size: 14px; }
+            .lock-card { padding: 20px; }
+            .lock-title { font-size: 20px; }
+
+            .admin-split {
+                grid-template-columns: 1fr;
+                grid-template-rows: minmax(240px, 1fr) minmax(280px, 1fr);
+            }
+
+            .admin-right { min-height: 620px; }
+        }
     </style>
 </head>
 <body>
@@ -449,24 +497,45 @@
         let sandboxTimer = null;
         const sandboxTemplates = {
             default: `<!doctype html><html><head><style>body{font-family:Arial;padding:20px}button{padding:8px 12px;border-radius:8px;border:1px solid #333;background:#f3f3f3;cursor:pointer}.box{margin-top:12px;padding:12px;border:1px dashed #aaa}</style></head><body><h3>Sweet Test</h3><p>Edit this code and click button.</p><button onclick="document.querySelector('.box').textContent='Updated '+new Date().toLocaleTimeString()">Run test</button><div class="box">Ready.</div></body></html>`,
-            menu: `<!doctype html><html><head><style>body{margin:0;font-family:Inter,Arial;display:grid;grid-template-columns:210px 1fr;height:100vh}.nav{background:#0f172a;color:#dbeafe;padding:12px}.nav button{display:block;width:100%;margin-bottom:8px;padding:8px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#fff}.main{padding:14px}.card{border:1px solid #cbd5e1;border-radius:10px;padding:14px}</style></head><body><div class="nav"><h4>Tester menu</h4><button onclick="set('Smoke tests')">Smoke tests</button><button onclick="set('Regression')">Regression</button><button onclick="set('UI checks')">UI checks</button></div><div class="main"><div class="card" id="out">Select scenario.</div></div><script>function set(t){document.getElementById('out').textContent='Mode: '+t}</script></body></html>`
+            menu: `<!doctype html><html><head><style>body{margin:0;font-family:Inter,Arial;display:grid;grid-template-columns:210px 1fr;height:100vh}.nav{background:#0f172a;color:#dbeafe;padding:12px}.nav button{display:block;width:100%;margin-bottom:8px;padding:8px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#fff}.main{padding:14px}.card{border:1px solid #cbd5e1;border-radius:10px;padding:14px}</style></head><body><div class="nav"><h4>Tester menu</h4><button onclick="set('Smoke tests')">Smoke tests</button><button onclick="set('Regression')">Regression</button><button onclick="set('UI checks')">UI checks</button></div><div class="main"><div class="card" id="out">Select scenario.</div></div><script>function set(t){document.getElementById('out').textContent='Mode: '+t}<\/script></body></html>`
         };
 
-        window.onload = () => {
+        document.addEventListener('DOMContentLoaded', () => {
             bindAccessHandlers();
-            firebase.initializeApp(firebaseConfig);
-            db = firebase.database();
-            initApp();
-        };
+            initFirebase();
+        });
+
+        function initFirebase() {
+            try {
+                if (!window.firebase) throw new Error('Firebase SDK is not loaded');
+                if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+                db = firebase.database();
+                initApp();
+            } catch (e) {
+                console.error('Firebase initialization failed:', e);
+                const status = document.getElementById('status');
+                const groupsStatus = document.getElementById('groups-status');
+                if (status) status.textContent = 'Firebase недоступен';
+                if (groupsStatus) groupsStatus.textContent = 'Firebase недоступен';
+            }
+        }
 
         function bindAccessHandlers() {
             const input = document.getElementById('access-code');
             const btn = document.getElementById('continue-btn');
 
-            btn.onclick = tryUnlock;
-            input.addEventListener('keydown', e => {
-                if (e.key === 'Enter') tryUnlock();
+            if (!input || !btn) return;
+            btn.addEventListener('click', tryUnlock);
+            input.addEventListener('input', () => {
+                document.getElementById('code-error').classList.remove('show');
             });
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    tryUnlock();
+                }
+            });
+            setTimeout(() => input.focus(), 0);
         }
 
         async function tryUnlock() {
@@ -779,6 +848,15 @@
             };
         }
 
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
         function drawMsg(m, otherName) {
             const area = document.getElementById('messages');
             const div = document.createElement('div');
@@ -787,7 +865,7 @@
             div.className = isVictim ? 'msg msg-me' : 'msg msg-other';
 
             const senderName = isVictim ? currentVictimName : otherName;
-            const rawText = m.val || m.text || m.message || "";
+            const rawText = String(m.val || m.text || m.message || "");
             const media = extractMedia(m);
 
             let content = '';
@@ -799,7 +877,7 @@
                 const src = t === 'voice' ? rawText : media.voice;
                 content = `<audio controls src="${src}"></audio>`;
             } else if (t === 'text' || !t) {
-                content = rawText.replace(/</g, '&lt;');
+                content = escapeHtml(rawText);
             }
 
             if (!content) content = '<i>(Нет данных)</i>';
